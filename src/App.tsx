@@ -16,9 +16,9 @@ interface OrderData {
   cached?: number;
 }
 
-// API credentials provided by the user
-const API_USER = 'catchmoney1m@gmail.com';
-const API_KEY = '5a16699b763e0c13cbe55bff872188c6';
+// NOTE: API credentials are no longer stored in the frontend.  Requests
+// are proxied through a Cloudflare Worker on the same origin to hide
+// sensitive information.
 
 /**
  * Extracts the order ID from the current URL. Supports query parameter ?orderID=, hash
@@ -48,18 +48,13 @@ const App: React.FC = () => {
    */
   const fetchStatus = async (orderID: string) => {
     try {
-      const payload = {
-        orderID: orderID,
-        apiUser: API_USER,
-        apiKey: API_KEY,
-        externalID: 0,
-        isMotherID: 0
-      };
-      const res = await fetch('https://futtransfer.top/orderStatusAPI', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        mode: 'cors'
+      // Build the URL for the Cloudflare Worker endpoint.  The Worker is
+      // deployed on the same origin (e.g. https://tracker.911gamingstore.com),
+      // and will call the FUTTransfer API using secret credentials.
+      const apiUrl = `${window.location.origin}/api/orderStatus/${orderID}`;
+      const res = await fetch(apiUrl, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
       });
       if (!res.ok) {
         throw new Error('Network response was not ok');
