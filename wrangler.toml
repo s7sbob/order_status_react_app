@@ -1,0 +1,10 @@
+name = "order-status-proxy"
+main = "worker/orderStatusWorker.js"
+compatibility_date = "2026-03-08"
+
+[vars]
+ALLOWED_ORIGIN = "https://tracker.911gamingstore.com"
+
+[[routes]]
+pattern = "tracker.911gamingstore.com/api/orderStatus/*"
+zone_name = "911gamingstore.com"

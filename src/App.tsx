@@ -119,8 +119,9 @@ const App: React.FC = () => {
       {/* Header */}
       <div className="header-card">
         <div className="header-gradient">
+          {/* Top header logo: replaced with the updated store icon */}
           <img
-            src="https://cdn.911gamingstore.com/images/1772930014427-169649995.png"
+            src="https://cdn.911gamingstore.com/images/1772942308088-842561273.webp"
             alt="911 Gaming Store Logo"
             className="header-logo"
           />
@@ -139,13 +140,7 @@ const App: React.FC = () => {
             className="shop-logo"
           />
           <h1>
-            Order Status{' '}
-            <span
-              id="orderIdDisplay"
-              style={{ fontSize: '0.8em', color: '#555', marginLeft: '10px', fontWeight: 'normal' }}
-            >
-              {orderData?.externalOrderID || getOrderIdFromUrl() ? `#${getOrderIdFromUrl()}` : ''}
-            </span>
+            Order Status
           </h1>
         </div>
         <div className="status-content">
@@ -223,11 +218,31 @@ const App: React.FC = () => {
             </div>
           )}
           {/* Contact support */}
+          {/* Contact support: show a WhatsApp button instead of displaying the raw phone number */}
           <div className="section_text contact-support">
             <div className="intro-message">
-              <div className="status-line phone">+20 127 263 1559</div>
-              <div className="status-line">For assistance, contact us via WhatsApp.</div>
+              <div className="status-line" style={{ marginBottom: '10px', fontWeight: 600 }}>Need help?</div>
+              <a
+                className="whatsapp-button"
+                href="https://wa.me/201272631559"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Contact via WhatsApp
+              </a>
             </div>
+          </div>
+
+          {/* Promotional section: button to visit the main 911 Gaming Store website */}
+          <div className="section_text promo-section">
+            <a
+              className="promo-button"
+              href="https://www.911gamingstore.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Visit 911GamingStore.com
+            </a>
           </div>
         </div>
       </div>

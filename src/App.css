@@ -217,6 +217,41 @@ body.dark-mode .status-in-progress {
   color: var(--primary-color);
 }
 
+/* WhatsApp button styles */
+.whatsapp-button {
+  display: inline-block;
+  background: #25d366;
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 25px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.3s ease;
+}
+.whatsapp-button:hover {
+  background: #1ebd5c;
+}
+
+/* Promotional button styles */
+.promo-button {
+  display: inline-block;
+  background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 25px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.3s ease;
+}
+.promo-button:hover {
+  background: linear-gradient(135deg, #22384a 0%, #2a4257 100%);
+}
+
+/* Promo section spacing */
+.promo-section {
+  text-align: center;
+}
+
 @media (max-width: 768px) {
   .status-card {
     margin: 10px;
