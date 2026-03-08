@@ -252,6 +252,85 @@ body.dark-mode .status-in-progress {
   text-align: center;
 }
 
+/* Screenshot card */
+.screenshot-card {
+  background: var(--card-bg-light);
+  border-radius: 15px;
+  padding: 20px;
+  margin: 20px 0;
+  border: 1px solid var(--border-color-light);
+  text-align: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+body.dark-mode .screenshot-card {
+  background: var(--card-bg-dark);
+  border: 1px solid var(--border-color-dark);
+}
+.screenshot-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border-color-light);
+}
+body.dark-mode .screenshot-image {
+  border: 1px solid var(--border-color-dark);
+}
+
+/* Error section */
+.error-section {
+  background: var(--card-bg-light);
+  border-radius: 15px;
+  padding: 20px;
+  margin: 20px 0;
+  border: 1px solid var(--border-color-light);
+}
+body.dark-mode .error-section {
+  background: var(--card-bg-dark);
+  border: 1px solid var(--border-color-dark);
+}
+.error-message {
+  background: linear-gradient(135deg, #fee2e2 0%, #ffe6e6 100%);
+  color: #b91c1c;
+  border-left: 4px solid #f56565;
+  padding: 10px 15px;
+  margin: 8px 0;
+  border-radius: 8px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+}
+body.dark-mode .error-message {
+  background: linear-gradient(135deg, #4b5563 0%, #374151 100%);
+  color: #fecaca;
+  border-left: 4px solid #f56565;
+}
+
+/* Resume button */
+.resume-section {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0;
+}
+.resume-button {
+  background: linear-gradient(135deg, #5a67d8 0%, #4e73df 100%);
+  color: #fff;
+  padding: 12px 30px;
+  border: none;
+  border-radius: 25px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+.resume-button:hover {
+  background: linear-gradient(135deg, #434190 0%, #4e73df 100%);
+  transform: translateY(-2px);
+}
+.resume-button:active {
+  transform: translateY(0);
+}
+
 @media (max-width: 768px) {
   .status-card {
     margin: 10px;

@@ -5,7 +5,11 @@
 // authenticate with the FUTTransfer API. The worker sends a POST request
 // to the remote API and returns the response with appropriate CORS headers.
 
-const API_ENDPOINT = "https://futtransfer.top/orderStatusAPI";
+// Base URL for the FUTTransfer service
+const API_BASE = "https://futtransfer.top";
+const ORDER_STATUS_ENDPOINT = `${API_BASE}/orderStatusAPI`;
+const SCREENSHOT_ENDPOINT = `${API_BASE}/getScreenshot.php`;
+const RESUME_ENDPOINT = `${API_BASE}/resumeOrderAPI`;
 
 export default {
   async fetch(request, env, ctx) {
@@ -44,33 +48,113 @@ export default {
       });
     }
 
-    // Build request body for FUTTransfer API
-    const requestBody = {
-      orderID: orderID,
-      externalID: 0,
-      isMotherID: 0,
-      apiUser: env.API_USER,
-      apiKey: env.API_KEY,
-    };
+    // Determine route: orderStatus, resumeOrder or invalid
+    // Path segments after /api
+    if (pathSegments.length >= 2) {
+      const action = pathSegments[1];
 
-    try {
-      const apiResponse = await fetch(API_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      });
+      // Handle orderStatus requests: return combined order status and screenshot
+      if (action === "orderStatus") {
+        if (!orderID) {
+          return new Response(JSON.stringify({ error: "Missing orderID" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
-      const contentType = apiResponse.headers.get("Content-Type") || "application/json";
-      const body = await apiResponse.text();
-      return new Response(body, {
-        status: apiResponse.status,
-        headers: { ...corsHeaders, "Content-Type": contentType },
-      });
-    } catch (err) {
-      return new Response(JSON.stringify({ error: "API request failed", detail: err.message }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        // Build request body for order status API
+        const statusBody = {
+          orderID: orderID,
+          externalID: 0,
+          isMotherID: 0,
+          apiUser: env.API_USER,
+          apiKey: env.API_KEY,
+        };
+
+        try {
+          // Call order status API
+          const statusRes = await fetch(ORDER_STATUS_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(statusBody),
+          });
+          const statusData = await statusRes.json();
+
+          // Call screenshot API (mode=2) to get proof image
+          let screenshotDataUri = null;
+          try {
+            const screenshotRes = await fetch(`${SCREENSHOT_ENDPOINT}?orderID=${encodeURIComponent(orderID)}&mode=2`);
+            if (screenshotRes.ok) {
+              const buffer = await screenshotRes.arrayBuffer();
+              const binary = new Uint8Array(buffer);
+              let binaryStr = "";
+              for (let i = 0; i < binary.length; i++) {
+                binaryStr += String.fromCharCode(binary[i]);
+              }
+              const base64 = btoa(binaryStr);
+              const contentType = screenshotRes.headers.get("Content-Type") || "image/png";
+              screenshotDataUri = `data:${contentType};base64,${base64}`;
+            }
+          } catch (screenshotErr) {
+            // If screenshot fails, ignore and continue
+            screenshotDataUri = null;
+          }
+
+          // Combine status data and screenshot into one response
+          const combined = {
+            ...statusData,
+            screenshot: screenshotDataUri,
+          };
+          return new Response(JSON.stringify(combined), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        } catch (err) {
+          return new Response(JSON.stringify({ error: "API request failed", detail: err.message }), {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      // Handle resumeOrder requests: resume an interrupted order
+      if (action === "resumeOrder") {
+        if (!orderID) {
+          return new Response(JSON.stringify({ error: "Missing orderID" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        try {
+          const resumeBody = {
+            orderID: orderID,
+            mode: "resume",
+            apiUser: env.API_USER,
+            apiKey: env.API_KEY,
+          };
+          const resumeRes = await fetch(RESUME_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(resumeBody),
+          });
+          const resumeJson = await resumeRes.json();
+          return new Response(JSON.stringify(resumeJson), {
+            status: resumeRes.status,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        } catch (err) {
+          return new Response(JSON.stringify({ error: "Resume request failed", detail: err.message }), {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
     }
+
+    // For any other path, return 404
+    return new Response(JSON.stringify({ error: "Not found" }), {
+      status: 404,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   },
 };

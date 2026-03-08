@@ -39,8 +39,10 @@ function getOrderIdFromUrl(): string {
 
 const App: React.FC = () => {
   const [orderData, setOrderData] = useState<OrderData | null>(null);
+  const [screenshot, setScreenshot] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [resumeMessage, setResumeMessage] = useState<string | null>(null);
 
   /**
    * Fetches the order status from the API for the provided order ID.
@@ -60,6 +62,11 @@ const App: React.FC = () => {
         throw new Error('Network response was not ok');
       }
       const data = await res.json();
+      // Extract screenshot if included in response
+      if (data && data.screenshot) {
+        setScreenshot(data.screenshot);
+        delete data.screenshot;
+      }
       setOrderData(data);
       setError(null);
     } catch (err) {
@@ -68,6 +75,37 @@ const App: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * Resume the order if it was interrupted. This sends a POST request to the
+   * Cloudflare Worker, which calls the resumeOrderAPI. On success, a
+   * confirmation message is shown and the status is refreshed shortly after.
+   */
+  const handleResume = async () => {
+    const orderID = getOrderIdFromUrl();
+    if (!orderID) return;
+    setResumeMessage(null);
+    try {
+      const apiUrl = `${window.location.origin}/api/resumeOrder/${orderID}`;
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setResumeMessage('Order resumed successfully. Please wait while processing continues.');
+      } else {
+        setResumeMessage(json.error || 'Failed to resume order.');
+      }
+    } catch (err) {
+      console.error(err);
+      setResumeMessage('Failed to resume order.');
+    }
+    setTimeout(() => {
+      const oid = getOrderIdFromUrl();
+      if (oid) fetchStatus(oid);
+    }, 3000);
   };
 
   useEffect(() => {
@@ -113,6 +151,48 @@ const App: React.FC = () => {
         return status;
     }
   };
+
+  // Map error codes to detailed descriptions and suggestions
+  const errorMap: Record<string, string> = {
+    wrongPersona:
+      'Switch your persona or provide the correct persona information, then try again.',
+    captcha: 'Solve the captcha, then retry the process.',
+    unassignedItemsPresent:
+      'Remove unassigned items from your account until there are fewer than 50, then retry.',
+    FailedProxyPoolExhausted:
+      'Legacy issue — you can retry the process.',
+    notEnoughCoins:
+      'You must have more than 1500 coins in your account balance. Add coins, then retry.',
+    tlFull:
+      'Ensure at least 3 available slots in both your transfer list and transfer targets, then retry.',
+    FailedProxyConnectionError:
+      'Technical proxy error — retrying should work.',
+    noClub:
+      'This account has no club. Try again or use a different account.',
+    console:
+      'Log out from the console and then retry.',
+    wrongConsole:
+      'Issue with the order type. Correct it or use a different account.',
+    loginFailed:
+      'Temporary login issue. Please retry.',
+    wrongUserPass:
+      'Use a new combination of username and password, then retry.',
+    wrongBA:
+      'Obtain a new backup code and use it, then retry.',
+    noTM:
+      'Account does not have access to the transfer market. Use a different account.',
+  };
+
+  // Collect any relevant instructions based on current order statuses
+  const errorMessages: string[] = [];
+  if (orderData) {
+    if (orderData.accountCheck && errorMap[orderData.accountCheck]) {
+      errorMessages.push(`${orderData.accountCheck}: ${errorMap[orderData.accountCheck]}`);
+    }
+    if (orderData.economyState && errorMap[orderData.economyState]) {
+      errorMessages.push(`${orderData.economyState}: ${errorMap[orderData.economyState]}`);
+    }
+  }
 
   return (
     <div className="container">
@@ -193,6 +273,30 @@ const App: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Screenshot card */}
+          {!error && !loading && screenshot && (
+            <div className="screenshot-card">
+              <img src={screenshot} alt="Account Screenshot" className="screenshot-image" />
+            </div>
+          )}
+
+          {/* Error messages and instructions */}
+          {!error && !loading && errorMessages.length > 0 && (
+            <div className="error-section">
+              {errorMessages.map((msg, idx) => (
+                <div key={idx} className="error-message">
+                  <i className="fas fa-exclamation-circle" style={{ marginRight: 8 }}></i>
+                  {msg}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Resume order info */}
+          {resumeMessage && (
+            <div className="alert alert-info" style={{ marginTop: 15 }}>{resumeMessage}</div>
+          )}
           {/* Current status details */}
           {!error && !loading && orderData && (
             <div className="section_text" id="currentStatusSection">
@@ -215,6 +319,14 @@ const App: React.FC = () => {
                   <strong>Economy State:</strong> {orderData.economyState}
                 </div>
               )}
+            </div>
+          )}
+          {/* Resume button section */}
+          {!error && !loading && orderData && (
+            <div className="resume-section">
+              <button className="resume-button" onClick={handleResume}>
+                Resume Order
+              </button>
             </div>
           )}
           {/* Contact support */}
