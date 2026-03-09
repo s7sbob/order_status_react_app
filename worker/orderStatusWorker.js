@@ -86,30 +86,39 @@ export default {
           // FUTTransfer's getScreenshot.php returns a JPEG image on success or the text "error" otherwise.
           let screenshotDataUri = null;
           const screenshotParams = [
+            `transferID=${encodeURIComponent(orderID)}`,
+            `transferId=${encodeURIComponent(orderID)}`,
             `orderID=${encodeURIComponent(orderID)}`,
             `orderId=${encodeURIComponent(orderID)}`,
           ];
+          // FUTTransfer may redirect indefinitely when using https; attempt both https and http protocols.
+          const screenshotBaseUrls = [
+            SCREENSHOT_ENDPOINT,
+            SCREENSHOT_ENDPOINT.replace('https://', 'http://'),
+          ];
           try {
-            for (const param of screenshotParams) {
-              const url = `${SCREENSHOT_ENDPOINT}?${param}&mode=2`;
-              const screenshotRes = await fetch(url);
-              if (!screenshotRes.ok) {
-                continue;
-              }
-              const contentType = screenshotRes.headers.get("Content-Type") || "";
-              if (contentType.startsWith("image")) {
-                const buffer = await screenshotRes.arrayBuffer();
-                const binary = new Uint8Array(buffer);
-                let binaryStr = "";
-                for (let i = 0; i < binary.length; i++) {
-                  binaryStr += String.fromCharCode(binary[i]);
+            outer: for (const baseUrl of screenshotBaseUrls) {
+              for (const param of screenshotParams) {
+                const url = `${baseUrl}?${param}&mode=2`;
+                const res = await fetch(url);
+                if (!res.ok) {
+                  continue;
                 }
-                const base64 = btoa(binaryStr);
-                const ct = contentType || "image/jpeg";
-                screenshotDataUri = `data:${ct};base64,${base64}`;
-                break;
+                const contentType = res.headers.get('Content-Type') || '';
+                if (contentType.startsWith('image')) {
+                  const buffer = await res.arrayBuffer();
+                  const binary = new Uint8Array(buffer);
+                  let binaryStr = '';
+                  for (let i = 0; i < binary.length; i++) {
+                    binaryStr += String.fromCharCode(binary[i]);
+                  }
+                  const base64 = btoa(binaryStr);
+                  const ct = contentType || 'image/jpeg';
+                  screenshotDataUri = `data:${ct};base64,${base64}`;
+                  break outer;
+                }
+                // If not an image, try next variant
               }
-              // If not an image, try next parameter variation
             }
           } catch (screenshotErr) {
             // swallow errors; screenshotDataUri remains null

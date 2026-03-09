@@ -61,9 +61,8 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   // Removed resume functionality: users cannot resume orders via the UI.
 
-  // Capture the order ID here for use throughout the component, including in
-  // fallback image URLs. This avoids repeated parsing of window.location and
-  // ensures consistency.
+  // Capture the order ID here for use throughout the component. This avoids
+  // repeated parsing of window.location and ensures consistency.
   const orderIdForImg = getOrderIdFromUrl();
 
   /**
@@ -298,20 +297,7 @@ const App: React.FC = () => {
               <img src={screenshot} alt="Account Screenshot" className="screenshot-image" />
             </div>
           )}
-          {/* Fallback: if no base64 screenshot returned by the API, attempt to display the image directly from FUTTransfer. */}
-          {!error && !loading && !screenshot && orderIdForImg && (
-            <div className="screenshot-card">
-              <img
-                src={`https://futtransfer.top/getScreenshot.php?orderID=${orderIdForImg}&mode=2`}
-                alt="Account Screenshot"
-                className="screenshot-image"
-                onError={(e) => {
-                  const target = e.currentTarget as HTMLImageElement;
-                  target.style.display = 'none';
-                }}
-              />
-            </div>
-          )}
+          {/* Fallback removed: we only display screenshots returned by the API (via Worker) to avoid exposing the image URL. */}
 
           {/* Error messages and instructions */}
           {!error && !loading && errorMessages.length > 0 && (
