@@ -82,24 +82,37 @@ export default {
           });
           const statusData = await statusRes.json();
 
-          // Call screenshot API (mode=2) to get proof image
+          // Attempt to fetch the screenshot using both orderID and orderId parameter names.
+          // FUTTransfer's getScreenshot.php returns a JPEG image on success or the text "error" otherwise.
           let screenshotDataUri = null;
+          const screenshotParams = [
+            `orderID=${encodeURIComponent(orderID)}`,
+            `orderId=${encodeURIComponent(orderID)}`,
+          ];
           try {
-            const screenshotRes = await fetch(`${SCREENSHOT_ENDPOINT}?orderID=${encodeURIComponent(orderID)}&mode=2`);
-            if (screenshotRes.ok) {
-              const buffer = await screenshotRes.arrayBuffer();
-              const binary = new Uint8Array(buffer);
-              let binaryStr = "";
-              for (let i = 0; i < binary.length; i++) {
-                binaryStr += String.fromCharCode(binary[i]);
+            for (const param of screenshotParams) {
+              const url = `${SCREENSHOT_ENDPOINT}?${param}&mode=2`;
+              const screenshotRes = await fetch(url);
+              if (!screenshotRes.ok) {
+                continue;
               }
-              const base64 = btoa(binaryStr);
-              const contentType = screenshotRes.headers.get("Content-Type") || "image/png";
-              screenshotDataUri = `data:${contentType};base64,${base64}`;
+              const contentType = screenshotRes.headers.get("Content-Type") || "";
+              if (contentType.startsWith("image")) {
+                const buffer = await screenshotRes.arrayBuffer();
+                const binary = new Uint8Array(buffer);
+                let binaryStr = "";
+                for (let i = 0; i < binary.length; i++) {
+                  binaryStr += String.fromCharCode(binary[i]);
+                }
+                const base64 = btoa(binaryStr);
+                const ct = contentType || "image/jpeg";
+                screenshotDataUri = `data:${ct};base64,${base64}`;
+                break;
+              }
+              // If not an image, try next parameter variation
             }
           } catch (screenshotErr) {
-            // If screenshot fails, ignore and continue
-            screenshotDataUri = null;
+            // swallow errors; screenshotDataUri remains null
           }
 
           // Combine status data and screenshot into one response

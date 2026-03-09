@@ -59,7 +59,12 @@ const App: React.FC = () => {
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [resumeMessage, setResumeMessage] = useState<string | null>(null);
+  // Removed resume functionality: users cannot resume orders via the UI.
+
+  // Capture the order ID here for use throughout the component, including in
+  // fallback image URLs. This avoids repeated parsing of window.location and
+  // ensures consistency.
+  const orderIdForImg = getOrderIdFromUrl();
 
   /**
    * Fetches the order status from the API for the provided order ID.
@@ -94,40 +99,7 @@ const App: React.FC = () => {
     }
   };
 
-  /**
-   * Resume the order if it was interrupted. This sends a POST request to the
-   * Cloudflare Worker, which calls the resumeOrderAPI. On success, a
-   * confirmation message is shown and the status is refreshed shortly after.
-   */
-  const handleResume = async () => {
-    const orderID = getOrderIdFromUrl();
-    if (!orderID) return;
-    setResumeMessage(null);
-    try {
-      // Call the resume endpoint on the worker.  Append the order ID in the path so it matches
-      // the worker's route configuration.  A POST request is used to trigger the resume.
-      const apiUrl = `${window.location.origin}/api/resumeOrder/${orderID}`;
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Passing orderID in body as well in case the worker expects it from JSON
-        body: JSON.stringify({ orderID }),
-      });
-      const json = await res.json();
-      if (res.ok) {
-        setResumeMessage('Order resumed successfully. Please wait while processing continues.');
-      } else {
-        setResumeMessage(json.error || 'Failed to resume order.');
-      }
-    } catch (err) {
-      console.error(err);
-      setResumeMessage('Failed to resume order.');
-    }
-    setTimeout(() => {
-      const oid = getOrderIdFromUrl();
-      if (oid) fetchStatus(oid);
-    }, 3000);
-  };
+  // NOTE: Resume functionality removed. Orders cannot be resumed via this interface.
 
   useEffect(() => {
     const orderID = getOrderIdFromUrl();
@@ -238,27 +210,7 @@ const App: React.FC = () => {
     }
   }
 
-  // Determine whether a resume button should be shown. We hide the resume button
-  // for temporary ban cases where the user must wait. Extend this list as needed.
-  const nonResumeCodes = [
-    'PlayerLostTempban',
-    'customerTempban',
-    'senderTempban',
-    'tempbanCooldown',
-    'PlayerLostTempbanCooldown',
-    'customerTempbanCooldown',
-    'senderTempbanCooldown',
-  ];
-  // Show resume button only when there is an actionable error and it's not a tempban-related state.
-  let showResume = false;
-  if (orderData && errorMessages.length > 0) {
-    const acc = orderData.accountCheck;
-    const econ = orderData.economyState;
-    const hasTempban =
-      (acc && nonResumeCodes.includes(acc)) ||
-      (econ && nonResumeCodes.includes(econ));
-    showResume = !hasTempban;
-  }
+  // No resume logic required since resume functionality has been removed.
 
   return (
     <div className="container">
@@ -346,6 +298,20 @@ const App: React.FC = () => {
               <img src={screenshot} alt="Account Screenshot" className="screenshot-image" />
             </div>
           )}
+          {/* Fallback: if no base64 screenshot returned by the API, attempt to display the image directly from FUTTransfer. */}
+          {!error && !loading && !screenshot && orderIdForImg && (
+            <div className="screenshot-card">
+              <img
+                src={`https://futtransfer.top/getScreenshot.php?orderID=${orderIdForImg}&mode=2`}
+                alt="Account Screenshot"
+                className="screenshot-image"
+                onError={(e) => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  target.style.display = 'none';
+                }}
+              />
+            </div>
+          )}
 
           {/* Error messages and instructions */}
           {!error && !loading && errorMessages.length > 0 && (
@@ -359,10 +325,7 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {/* Resume order info */}
-          {resumeMessage && (
-            <div className="alert alert-info" style={{ marginTop: 15 }}>{resumeMessage}</div>
-          )}
+          {/* Resume functionality removed. No messages to display. */}
           {/* Current status details */}
           {!error && !loading && orderData && (
             <div className="section_text" id="currentStatusSection">
@@ -388,14 +351,7 @@ const App: React.FC = () => {
             )}
             </div>
           )}
-          {/* Resume button section */}
-        {showResume && (
-          <div className="resume-section">
-            <button className="resume-button" onClick={handleResume}>
-              Resume Order
-            </button>
-          </div>
-        )}
+          {/* Resume button removed */}
           {/* Contact support */}
           {/* Contact support: show a WhatsApp button instead of displaying the raw phone number */}
           <div className="section_text contact-support">
