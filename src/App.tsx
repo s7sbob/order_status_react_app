@@ -14,6 +14,23 @@ interface OrderData {
   wasAborted?: number;
   knownClub?: string;
   cached?: number;
+
+  /**
+   * The simplified status provided by the API.  This is an optional field
+   * (e.g. "pending") that we display in place of the raw status code if
+   * present.  See FUTTransfer documentation for details.
+   */
+  simplifiedStatus?: string;
+  /**
+   * A user-friendly description of the accountCheck state.  Returned by
+   * FUTTransfer API as `accountCheckLong` when available.
+   */
+  accountCheckLong?: string;
+  /**
+   * A user-friendly description of the economyState.  Returned by
+   * FUTTransfer API as `economyStateLong` when available.
+   */
+  economyStateLong?: string;
 }
 
 // NOTE: API credentials are no longer stored in the frontend.  Requests
@@ -87,10 +104,14 @@ const App: React.FC = () => {
     if (!orderID) return;
     setResumeMessage(null);
     try {
+      // Call the resume endpoint on the worker.  Append the order ID in the path so it matches
+      // the worker's route configuration.  A POST request is used to trigger the resume.
       const apiUrl = `${window.location.origin}/api/resumeOrder/${orderID}`;
       const res = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // Passing orderID in body as well in case the worker expects it from JSON
+        body: JSON.stringify({ orderID }),
       });
       const json = await res.json();
       if (res.ok) {
@@ -147,40 +168,63 @@ const App: React.FC = () => {
         return 'Waiting for assignment...';
       case 'interrupted':
         return 'Order currently interrupted. Please wait...';
+      case 'finished':
+        return 'Order completed';
       default:
-        return status;
+        // Fallback: capitalise the status code
+        return status.charAt(0).toUpperCase() + status.slice(1);
     }
   };
 
   // Map error codes to detailed descriptions and suggestions
   const errorMap: Record<string, string> = {
+    // Persona / login issues
     wrongPersona:
-      'Switch your persona or provide the correct persona information, then try again.',
-    captcha: 'Solve the captcha, then retry the process.',
-    unassignedItemsPresent:
-      'Remove unassigned items from your account until there are fewer than 50, then retry.',
-    FailedProxyPoolExhausted:
-      'Legacy issue — you can retry the process.',
-    notEnoughCoins:
-      'You must have more than 1500 coins in your account balance. Add coins, then retry.',
-    tlFull:
-      'Ensure at least 3 available slots in both your transfer list and transfer targets, then retry.',
-    FailedProxyConnectionError:
-      'Technical proxy error — retrying should work.',
-    noClub:
-      'This account has no club. Try again or use a different account.',
-    console:
-      'Log out from the console and then retry.',
-    wrongConsole:
-      'Issue with the order type. Correct it or use a different account.',
-    loginFailed:
-      'Temporary login issue. Please retry.',
+      'Please switch to the correct persona or provide the correct persona information, then try again.',
+    captcha: 'Please solve the captcha and then retry.',
     wrongUserPass:
       'Use a new combination of username and password, then retry.',
-    wrongBA:
-      'Obtain a new backup code and use it, then retry.',
-    noTM:
-      'Account does not have access to the transfer market. Use a different account.',
+    wrongBA: 'Obtain a new backup code and use it, then retry.',
+    noTM: 'This account does not have access to the transfer market. Submit a different account.',
+    // Transfer list and coins
+    tlFull:
+      'There is no room on your transfer list. Please sell some items or put them in your club.',
+    notEnoughCoins:
+      'Not enough coins available on the account. Please ensure you have enough coins available before retrying.',
+    unassignedItemsPresent:
+      'There are unassigned items present. Please put them on your transfer list or send them to your club.',
+    // Login and session issues
+    console:
+      'You are still logged in on console or have not closed Ultimate Team properly. Please close Ultimate Team by going to the main menu and confirming exit.',
+    loginFailed:
+      'We were not able to log in. This can happen if you have the web or mobile app open or when EA has server issues. Should the issue persist, please contact our support team.',
+    LoginFailedDeviceBan:
+      'We were not able to log in. This can happen if you have the web or mobile app open or when EA has server issues. Should the issue persist, please contact our support team.',
+    FailedSessionExpiredCustomerLoggedIn:
+      'You are logged in on the EA webapp. Please log out and try again.',
+    'FailedSessionExpiredCustomerLoggedIn?':
+      'You are logged in on the EA webapp. Please log out and try again.',
+    FailLoggedInConsoleTo:
+      'You are logged in on the EA webapp. Please log out and try again.',
+    FailedProxyConnectionError:
+      'Technical proxy error — retrying should work.',
+    FailedProxyPoolExhausted:
+      'This is a legacy proxy error — you can retry the process.',
+    FailedCouldNotStartTo:
+      'Failed to start the transfer. This may be due to a temporary issue with the game servers or account. Please click resume to attempt again.',
+    noClub:
+      'This account has no club. Please use an account with an active club.',
+    wrongConsole:
+      'There is an issue with the order type. Correct it or submit a different account.',
+    // Temporary ban / cooldown
+    PlayerLostTempban:
+      'Your account has received a temporary ban from EA due to excessive market activity. This ban typically lasts 24 hours. You can still play the game normally. We will automatically resume your order once the ban expires.',
+    customerTempban:
+      'Your account has received a temporary ban from EA due to excessive market activity. This ban typically lasts 24 hours. You can still play the game normally. We will automatically resume your order once the ban expires.',
+    senderTempban:
+      'The sender account has received a temporary ban from EA due to excessive market activity. This ban typically lasts 24 hours. We will automatically resume your order once the ban expires.',
+    tempbanCooldown:
+      'Your account is temporarily paused after a recent ban. No action is required; the transfer will resume automatically.',
   };
 
   // Collect any relevant instructions based on current order statuses
@@ -192,6 +236,28 @@ const App: React.FC = () => {
     if (orderData.economyState && errorMap[orderData.economyState]) {
       errorMessages.push(`${orderData.economyState}: ${errorMap[orderData.economyState]}`);
     }
+  }
+
+  // Determine whether a resume button should be shown. We hide the resume button
+  // for temporary ban cases where the user must wait. Extend this list as needed.
+  const nonResumeCodes = [
+    'PlayerLostTempban',
+    'customerTempban',
+    'senderTempban',
+    'tempbanCooldown',
+    'PlayerLostTempbanCooldown',
+    'customerTempbanCooldown',
+    'senderTempbanCooldown',
+  ];
+  // Show resume button only when there is an actionable error and it's not a tempban-related state.
+  let showResume = false;
+  if (orderData && errorMessages.length > 0) {
+    const acc = orderData.accountCheck;
+    const econ = orderData.economyState;
+    const hasTempban =
+      (acc && nonResumeCodes.includes(acc)) ||
+      (econ && nonResumeCodes.includes(econ));
+    showResume = !hasTempban;
   }
 
   return (
@@ -304,31 +370,32 @@ const App: React.FC = () => {
                 <i className="fas fa-info-circle" style={{ color: 'var(--primary-color)', marginRight: 10 }}></i>
                 Current Status
               </h5>
-              {orderData.status && (
-                <div className="alert alert-info">
-                  <strong>Status:</strong> {orderData.status}
-                </div>
-              )}
-              {orderData.accountCheck && (
-                <div className="alert alert-info">
-                  <strong>Account Check:</strong> {orderData.accountCheck}
-                </div>
-              )}
-              {orderData.economyState && (
-                <div className="alert alert-info">
-                  <strong>Economy State:</strong> {orderData.economyState}
-                </div>
-              )}
+            {/* Display simplified/long statuses when available */}
+            {orderData.status && (
+              <div className="alert alert-info">
+                <strong>Status:</strong> {orderData.simplifiedStatus || orderData.status.charAt(0).toUpperCase() + orderData.status.slice(1)}
+              </div>
+            )}
+            {orderData.accountCheck && (
+              <div className="alert alert-info">
+                <strong>Account Check:</strong> {orderData.accountCheckLong || orderData.accountCheck.charAt(0).toUpperCase() + orderData.accountCheck.slice(1)}
+              </div>
+            )}
+            {orderData.economyState && (
+              <div className="alert alert-info">
+                <strong>Economy State:</strong> {orderData.economyStateLong || orderData.economyState.charAt(0).toUpperCase() + orderData.economyState.slice(1)}
+              </div>
+            )}
             </div>
           )}
           {/* Resume button section */}
-          {!error && !loading && orderData && (
-            <div className="resume-section">
-              <button className="resume-button" onClick={handleResume}>
-                Resume Order
-              </button>
-            </div>
-          )}
+        {showResume && (
+          <div className="resume-section">
+            <button className="resume-button" onClick={handleResume}>
+              Resume Order
+            </button>
+          </div>
+        )}
           {/* Contact support */}
           {/* Contact support: show a WhatsApp button instead of displaying the raw phone number */}
           <div className="section_text contact-support">

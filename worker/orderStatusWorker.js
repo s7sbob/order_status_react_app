@@ -31,21 +31,23 @@ export default {
     const url = new URL(request.url);
     let orderID = null;
     const pathSegments = url.pathname.split("/").filter(Boolean);
-    // Expecting path like /api/orderStatus/<orderID>
-    // e.g., pathSegments = ["api", "orderStatus", "12345"]
-    if (pathSegments.length >= 3 && pathSegments[1] === "orderStatus") {
+    // Expecting paths like /api/orderStatus/<orderID> or /api/resumeOrder/<orderID>
+    if (pathSegments.length >= 3 && (pathSegments[1] === "orderStatus" || pathSegments[1] === "resumeOrder")) {
       orderID = pathSegments.slice(2).join("/");
     }
     // Fallback: check query parameter ?orderID=
     if (!orderID) {
       orderID = url.searchParams.get("orderID") || url.searchParams.get("orderId");
     }
-
-    if (!orderID) {
-      return new Response(JSON.stringify({ error: "Missing orderID" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // If still no orderID, attempt to read from JSON body (for resume) when method is POST
+    if (!orderID && request.method === "POST") {
+      try {
+        const cloned = request.clone();
+        const body = await cloned.json();
+        orderID = body.orderID || body.orderId || null;
+      } catch (e) {
+        // ignore JSON parse errors
+      }
     }
 
     // Determine route: orderStatus, resumeOrder or invalid
