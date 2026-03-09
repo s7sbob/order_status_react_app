@@ -11,6 +11,10 @@ const ORDER_STATUS_ENDPOINT = `${API_BASE}/orderStatusAPI`;
 const SCREENSHOT_ENDPOINT = `${API_BASE}/getScreenshot.php`;
 const RESUME_ENDPOINT = `${API_BASE}/resumeOrderAPI`;
 
+// Define the endpoint for serving raw screenshots via this worker.  Clients
+// can request /api/screenshot/<orderId> to obtain the latest proof image
+// without exposing the original FUTTransfer URL.
+
 export default {
   async fetch(request, env, ctx) {
     // Basic CORS headers. Adjust ALLOWED_ORIGIN to your site for security.
@@ -32,7 +36,7 @@ export default {
     let orderID = null;
     const pathSegments = url.pathname.split("/").filter(Boolean);
     // Expecting paths like /api/orderStatus/<orderID> or /api/resumeOrder/<orderID>
-    if (pathSegments.length >= 3 && (pathSegments[1] === "orderStatus" || pathSegments[1] === "resumeOrder")) {
+    if (pathSegments.length >= 3 && (pathSegments[1] === "orderStatus" || pathSegments[1] === "resumeOrder" || pathSegments[1] === "screenshot")) {
       orderID = pathSegments.slice(2).join("/");
     }
     // Fallback: check query parameter ?orderID=
@@ -55,7 +59,63 @@ export default {
     if (pathSegments.length >= 2) {
       const action = pathSegments[1];
 
-      // Handle orderStatus requests: return combined order status and screenshot
+      // Handle screenshot requests: stream the image file from FUTTransfer and do not expose original URL
+      if (action === "screenshot") {
+        if (!orderID) {
+          return new Response("Missing orderID", { status: 400, headers: corsHeaders });
+        }
+        try {
+          // The FUTTransfer screenshot API uses POST with JSON credentials. Build body
+          const requestBody = {
+            apiUser: env.API_USER,
+            apiKey: env.API_KEY,
+          };
+          // Try both HTTPS and HTTP endpoints in case of redirect issues
+          const screenshotUrls = [
+            `${SCREENSHOT_ENDPOINT}?orderID=${encodeURIComponent(orderID)}&mode=2`,
+            `${SCREENSHOT_ENDPOINT.replace('https://', 'http://')}?orderID=${encodeURIComponent(orderID)}&mode=2`,
+          ];
+          for (const sUrl of screenshotUrls) {
+            const ssRes = await fetch(sUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(requestBody),
+            });
+            if (!ssRes.ok) {
+              continue;
+            }
+            const ct = ssRes.headers.get("Content-Type") || "application/octet-stream";
+            if (!ct.startsWith("image")) {
+              continue;
+            }
+            const buffer = await ssRes.arrayBuffer();
+            // Check if the response contains the word "error" and skip
+            const binary = new Uint8Array(buffer);
+            let binaryStr = "";
+            for (let i = 0; i < binary.length; i++) {
+              binaryStr += String.fromCharCode(binary[i]);
+            }
+            if (binaryStr.trim().toLowerCase() === "error") {
+              continue;
+            }
+            return new Response(buffer, {
+              status: 200,
+              headers: { ...corsHeaders, "Content-Type": ct },
+            });
+          }
+          // No valid image found
+          return new Response(null, { status: 204, headers: corsHeaders });
+        } catch (err) {
+          return new Response("Failed to fetch screenshot", { status: 502, headers: corsHeaders });
+        }
+      }
+
+      // Handle orderStatus requests: proxy the order status API.  We no longer
+      // attempt to fetch a screenshot within this request because the
+      // screenshot endpoint is available separately.  This keeps the
+      // response lightweight and avoids unnecessary API calls.  The
+      // frontend will call /api/screenshot/<orderId> to obtain the proof
+      // image if needed.
       if (action === "orderStatus") {
         if (!orderID) {
           return new Response(JSON.stringify({ error: "Missing orderID" }), {
@@ -81,53 +141,11 @@ export default {
             body: JSON.stringify(statusBody),
           });
           const statusData = await statusRes.json();
-
-          // Attempt to fetch the screenshot using both orderID and orderId parameter names.
-          // FUTTransfer's getScreenshot.php returns a JPEG image on success or the text "error" otherwise.
-          let screenshotDataUri = null;
-          const screenshotParams = [
-            `transferID=${encodeURIComponent(orderID)}`,
-            `transferId=${encodeURIComponent(orderID)}`,
-            `orderID=${encodeURIComponent(orderID)}`,
-            `orderId=${encodeURIComponent(orderID)}`,
-          ];
-          // FUTTransfer may redirect indefinitely when using https; attempt both https and http protocols.
-          const screenshotBaseUrls = [
-            SCREENSHOT_ENDPOINT,
-            SCREENSHOT_ENDPOINT.replace('https://', 'http://'),
-          ];
-          try {
-            outer: for (const baseUrl of screenshotBaseUrls) {
-              for (const param of screenshotParams) {
-                const url = `${baseUrl}?${param}&mode=2`;
-                const res = await fetch(url);
-                if (!res.ok) {
-                  continue;
-                }
-                const contentType = res.headers.get('Content-Type') || '';
-                if (contentType.startsWith('image')) {
-                  const buffer = await res.arrayBuffer();
-                  const binary = new Uint8Array(buffer);
-                  let binaryStr = '';
-                  for (let i = 0; i < binary.length; i++) {
-                    binaryStr += String.fromCharCode(binary[i]);
-                  }
-                  const base64 = btoa(binaryStr);
-                  const ct = contentType || 'image/jpeg';
-                  screenshotDataUri = `data:${ct};base64,${base64}`;
-                  break outer;
-                }
-                // If not an image, try next variant
-              }
-            }
-          } catch (screenshotErr) {
-            // swallow errors; screenshotDataUri remains null
-          }
-
-          // Combine status data and screenshot into one response
+          // Always return screenshot as null.  The separate /api/screenshot
+          // route will provide the proof image if available.
           const combined = {
             ...statusData,
-            screenshot: screenshotDataUri,
+            screenshot: null,
           };
           return new Response(JSON.stringify(combined), {
             status: 200,

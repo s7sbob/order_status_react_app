@@ -56,7 +56,11 @@ function getOrderIdFromUrl(): string {
 
 const App: React.FC = () => {
   const [orderData, setOrderData] = useState<OrderData | null>(null);
-  const [screenshot, setScreenshot] = useState<string | null>(null);
+  // This component no longer stores screenshot data in state.  Instead, it
+  // displays the screenshot via a dedicated worker route using the order ID.
+  // We still track a version/timestamp to force image refresh every update.
+  // The timestamp is appended as a query parameter to bust caches.
+  const [screenshotVersion, setScreenshotVersion] = useState<number>(Date.now());
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   // Removed resume functionality: users cannot resume orders via the UI.
@@ -85,11 +89,13 @@ const App: React.FC = () => {
       const data = await res.json();
       // Extract screenshot if included in response
       if (data && data.screenshot) {
-        setScreenshot(data.screenshot);
+        // Screenshot field is ignored since we display screenshots via a separate endpoint.
         delete data.screenshot;
       }
       setOrderData(data);
       setError(null);
+      // Update the screenshot version to refresh the displayed image
+      setScreenshotVersion(Date.now());
     } catch (err) {
       console.error(err);
       setError('Failed to fetch order status.');
@@ -291,13 +297,22 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {/* Screenshot card */}
-          {!error && !loading && screenshot && (
+          {/* Screenshot card via worker route.  The image is fetched from a server-side endpoint
+              that proxies the FUTTransfer screenshot.  A cache-busting query parameter
+              ensures the image refreshes whenever the status updates. */}
+          {!error && !loading && orderData && (
             <div className="screenshot-card">
-              <img src={screenshot} alt="Account Screenshot" className="screenshot-image" />
+              <img
+                src={`${window.location.origin}/api/screenshot/${getOrderIdFromUrl()}?v=${screenshotVersion}`}
+                alt="Account Screenshot"
+                className="screenshot-image"
+                onError={(e) => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  target.style.display = 'none';
+                }}
+              />
             </div>
           )}
-          {/* Fallback removed: we only display screenshots returned by the API (via Worker) to avoid exposing the image URL. */}
 
           {/* Error messages and instructions */}
           {!error && !loading && errorMessages.length > 0 && (
